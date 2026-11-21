@@ -66,6 +66,7 @@ h2{font-size:16px;margin:0 0 10px;font-weight:800}
 .sheet{width:100%;max-width:480px;background:var(--card);border-radius:24px 24px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom,0px));animation:up .22s ease-out;max-height:92vh;overflow-y:auto}
 @keyframes up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion:reduce){.sheet{animation:none}.seg{transition:none}}
+#estadisticas .stat-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}#estadisticas .stat-row:last-child{border-bottom:0}#estadisticas .stat-label{overflow:hidden;text-overflow:ellipsis}#estadisticas .stat-value{font-weight:800;white-space:nowrap}#estadisticas .bar{height:7px;background:var(--line);border-radius:8px;overflow:hidden;margin-top:5px}#estadisticas .bar span{display:block;height:100%;background:var(--acc);border-radius:8px}
 .seg2{display:grid;grid-template-columns:1fr 1fr;background:var(--bg);border-radius:14px;padding:4px;margin-bottom:14px}
 .seg2 button{border:0;background:transparent;padding:10px;border-radius:11px;font-weight:700;color:var(--muted)}
 .seg2 button.on.e{background:var(--exp);color:#fff}
@@ -86,7 +87,7 @@ input:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-of
 <div class="app">
   <header>
     <div><h1>Mis Finanzas</h1><div class="sub" id="mes"></div></div>
-    <button class="icon-btn" id="tema" aria-label="Cambiar entre modo claro y oscuro">☾</button>
+    <div style="display:flex;gap:8px"><button class="icon-btn" id="seguridad" aria-label="Privacidad y copias de seguridad" title="Privacidad y copias de seguridad">⚙</button><button class="icon-btn" id="tema" aria-label="Cambiar entre modo claro y oscuro">☾</button></div>
   </header>
 
   <section class="cards">
@@ -106,6 +107,8 @@ input:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-of
       <button id="lgs"></button>
     </div>
   </section>
+
+  <section class="card" style="margin-top:10px"><h2>Resumen por categoría · este mes</h2><div id="estadisticas"><div class="empty">Sin movimientos este mes.</div></div></section>
 
   <section class="list card" style="margin-top:10px">
     <h2>Últimos movimientos</h2>
@@ -135,6 +138,31 @@ input:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-of
       <button id="cancel">Cancelar</button>
       <button id="guardar" class="ok">Guardar registro</button>
     </div>
+  </div>
+</div>
+
+<div class="back" id="ajustes">
+  <div class="sheet" role="dialog" aria-label="Privacidad y copias de seguridad">
+    <h2>Privacidad y copias de seguridad</h2>
+    <p class="lbl">Crea una copia de tus movimientos o restaura una copia anterior. El archivo se guarda en tu dispositivo.</p>
+    <div class="actions"><button id="exportar" class="ok">Exportar copia JSON</button><button id="importar">Importar copia</button></div>
+    <input id="archivoCopia" type="file" accept=".json,application/json" style="display:none">
+    <div style="height:1px;background:var(--line);margin:18px 0"></div>
+    <h2>Bloqueo con PIN</h2>
+    <p class="lbl">Añade un PIN de 6 dígitos para mostrar una pantalla de bloqueo al abrir la aplicación.</p>
+    <label for="pinNuevo">Nuevo PIN (6 dígitos)</label><input id="pinNuevo" type="password" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="••••••">
+    <label for="pinConfirmar">Confirmar PIN</label><input id="pinConfirmar" type="password" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="••••••">
+    <div class="err" id="errAjustes" role="alert"></div>
+    <div class="actions"><button id="guardarPin" class="ok">Activar / cambiar PIN</button><button id="quitarPin">Desactivar PIN</button></div>
+    <div class="actions"><button id="cerrarAjustes">Cerrar</button></div>
+    <p class="lbl" style="margin-top:12px">Aviso: el PIN añade privacidad visual, pero no cifra los registros ni sustituye el bloqueo del móvil. Si olvidas el PIN, la copia JSON permite recuperar los datos en otra instalación.</p>
+  </div>
+</div>
+<div class="back" id="bloqueo" style="z-index:40">
+  <div class="sheet" role="dialog" aria-label="Desbloquear Mis Finanzas">
+    <h2>Mis Finanzas está bloqueada</h2><p class="lbl">Introduce tu PIN para continuar.</p>
+    <label for="pinEntrada">PIN de 6 dígitos</label><input id="pinEntrada" type="password" inputmode="numeric" maxlength="6" placeholder="••••••">
+    <div class="err" id="errBloqueo" role="alert"></div><div class="actions"><button id="desbloquear" class="ok">Desbloquear</button></div>
   </div>
 </div>
 
@@ -179,6 +207,7 @@ function render(){
   $('mes').textContent=new Date().toLocaleDateString('es-MX',{month:'long',year:'numeric'});
   dona(mi,mg);
   lista();
+  renderEstadisticas();
 }
 function dona(mi,mg){
   var tot=mi+mg, R=78, C=2*Math.PI*R, svg='';
@@ -268,7 +297,86 @@ $('guardar').onclick=function(){
   save();cerrar();render();
 };
 
+
+/* Copias de seguridad */
+function exportarCopia(){
+  var data={app:'Mis Finanzas',version:1,exportedAt:new Date().toISOString(),transactions:tx};
+  var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  var url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='mis-finanzas-copia-'+hoy()+'.json';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+}
+function importarCopia(file){
+  if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(){
+    try{
+      var data=JSON.parse(String(reader.result||''));
+      if(!data||data.app!=='Mis Finanzas'||data.version!==1||!Array.isArray(data.transactions))throw new Error('El archivo no es una copia válida de Mis Finanzas.');
+      var valid=data.transactions.every(function(t){return t&&Number.isFinite(Number(t.id))&&(t.tipo==='ingreso'||t.tipo==='gasto')&&Number.isFinite(Number(t.monto))&&Number(t.monto)>0&&typeof t.desc==='string'&&typeof t.cat==='string'&&/^\\d{4}-\\d{2}-\\d{2}$/.test(t.fecha)});
+      if(!valid)throw new Error('La copia contiene movimientos con un formato incorrecto.');
+      if(!confirm('La importación sustituirá los movimientos actuales ('+tx.length+') por los de la copia ('+data.transactions.length+'). ¿Continuar?'))return;
+      tx=data.transactions.map(function(t){return {id:Number(t.id),tipo:t.tipo,monto:Math.round(Number(t.monto)*100)/100,desc:t.desc.slice(0,120),fecha:t.fecha,cat:t.cat.slice(0,60)}});
+      save();render();$('ajustes').className='back';alert('Copia restaurada correctamente.');
+    }catch(e){$('errAjustes').textContent=e.message||'No se pudo leer la copia.'}
+  };
+  reader.onerror=function(){$('errAjustes').textContent='No se pudo leer el archivo.'};
+  reader.readAsText(file);
+}
+$('seguridad').onclick=function(){$('errAjustes').textContent='';$('ajustes').className='back on'};
+$('cerrarAjustes').onclick=function(){$('ajustes').className='back'};
+$('ajustes').onclick=function(e){if(e.target===$('ajustes'))$('ajustes').className='back'};
+$('exportar').onclick=exportarCopia;
+$('importar').onclick=function(){$('archivoCopia').click()};
+$('archivoCopia').onchange=function(){importarCopia(this.files&&this.files[0]);this.value=''};
+
+/* Resumen mensual por categoría */
+function renderEstadisticas(){
+  var mes=hoy().slice(0,7),totales={},total=0;
+  tx.forEach(function(t){if(t.fecha.slice(0,7)===mes&&t.tipo==='gasto'){totales[t.cat]=(totales[t.cat]||0)+t.monto;total+=t.monto}});
+  var keys=Object.keys(totales).sort(function(a,b){return totales[b]-totales[a]});
+  if(!keys.length){$('estadisticas').innerHTML='<div class="empty">Sin gastos registrados este mes.</div>';return}
+  $('estadisticas').innerHTML=keys.map(function(k){var p=total?totales[k]/total*100:0;return '<div class="stat-row"><div style="flex:1;min-width:0"><div class="stat-label">'+esc(k)+'</div><div class="bar"><span style="width:'+p.toFixed(1)+'%"></span></div></div><div class="stat-value">'+money(totales[k])+' · '+Math.round(p)+'%</div></div>'}).join('');
+}
+
+
+/* PIN local con derivación PBKDF2 */
+var PINKEY='misfinanzas:pin:v1';
+function b64(bytes){return btoa(String.fromCharCode.apply(null,new Uint8Array(bytes)))}
+function unb64(s){return Uint8Array.from(atob(s),function(c){return c.charCodeAt(0)})}
+function derivarPin(pin,salt){
+  return crypto.subtle.importKey('raw',new TextEncoder().encode(pin),'PBKDF2',false,['deriveBits']).then(function(k){return crypto.subtle.deriveBits({name:'PBKDF2',salt:salt,iterations:150000,hash:'SHA-256'},k,256)});
+}
+function leerPin(){try{return JSON.parse(localStorage.getItem(PINKEY)||'null')}catch(e){return null}}
+function comprobarPin(pin){
+  var p=leerPin();if(!p||!crypto.subtle)return Promise.resolve(false);
+  return derivarPin(pin,unb64(p.salt)).then(function(bits){var a=new Uint8Array(bits),b=unb64(p.hash);if(a.length!==b.length)return false;var diff=0;for(var i=0;i<a.length;i++)diff|=a[i]^b[i];return diff===0});
+}
+$('guardarPin').onclick=function(){
+  var p=$('pinNuevo').value,q=$('pinConfirmar').value;
+  if(!/^\\d{6}$/.test(p)){$('errAjustes').textContent='El PIN debe tener exactamente 6 dígitos.';return}
+  if(p!==q){$('errAjustes').textContent='Los PIN no coinciden.';return}
+  if(!window.crypto||!crypto.subtle){$('errAjustes').textContent='Este navegador no permite configurar el PIN de forma segura.';return}
+  var salt=crypto.getRandomValues(new Uint8Array(16));
+  derivarPin(p,salt).then(function(bits){localStorage.setItem(PINKEY,JSON.stringify({salt:b64(salt),hash:b64(bits)}));$('pinNuevo').value='';$('pinConfirmar').value='';$('errAjustes').textContent='PIN activado correctamente.'}).catch(function(){$('errAjustes').textContent='No se pudo guardar el PIN.'});
+};
+$('quitarPin').onclick=function(){
+  var p=$('pinNuevo').value;
+  if(!leerPin()){$('errAjustes').textContent='No hay ningún PIN activado.';return}
+  if(!p){$('errAjustes').textContent='Introduce el PIN actual en el primer campo para desactivarlo.';return}
+  comprobarPin(p).then(function(ok){if(ok){localStorage.removeItem(PINKEY);$('pinNuevo').value='';$('pinConfirmar').value='';$('errAjustes').textContent='PIN desactivado.'}else{$('errAjustes').textContent='El PIN actual no es correcto.'}});
+};
+function iniciarBloqueo(){
+  if(leerPin()){$('bloqueo').className='back on';$('pinEntrada').focus()}
+}
+$('desbloquear').onclick=function(){
+  var p=$('pinEntrada').value;
+  if(!/^\\d{6}$/.test(p)){$('errBloqueo').textContent='Introduce los 6 dígitos.';return}
+  comprobarPin(p).then(function(ok){if(ok){$('bloqueo').className='back';$('pinEntrada').value='';$('errBloqueo').textContent=''}else{$('errBloqueo').textContent='PIN incorrecto.';$('pinEntrada').value=''}});
+};
+$('pinEntrada').addEventListener('keydown',function(e){if(e.key==='Enter')$('desbloquear').click()});
+
 initTema();load();render();
+iniciarBloqueo();
 if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}
 })();
 </script>
