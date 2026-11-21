@@ -429,7 +429,28 @@ $('pinEntrada').addEventListener('keydown',function(e){if(e.key==='Enter')$('des
 
 initTema();load();render();
 iniciarBloqueo();
-if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    var hadController=!!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange',function(){
+      if(hadController&&!sessionStorage.getItem('misfinanzas:sw-reloaded')){
+        sessionStorage.setItem('misfinanzas:sw-reloaded','1');
+        window.location.reload();
+      }
+    });
+    navigator.serviceWorker.register('./sw.js').then(function(registration){
+      registration.update().catch(function(){});
+      registration.addEventListener('updatefound',function(){
+        var worker=registration.installing;
+        if(worker)worker.addEventListener('statechange',function(){
+          if(worker.state==='installed'&&navigator.serviceWorker.controller){
+            worker.postMessage({type:'SKIP_WAITING'});
+          }
+        });
+      });
+    }).catch(function(){});
+  });
+}
 })();
 </script>
 </body>
