@@ -1,11 +1,54 @@
-const CACHE='mis-finanzas-v3';
+const CACHE='mis-finanzas-v4';
 const ARCHIVOS=['./','./index.html','./manifest.webmanifest','./icon.svg'];
-self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ARCHIVOS)).then(()=>self.skipWaiting()))});
-self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(n=>n!==CACHE).map(n=>caches.delete(n)))).then(()=>self.clients.claim()))});
-self.addEventListener('fetch',e=>{
-  if(e.request.method!=='GET')return;
-  e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{
-    if(res&&res.status===200&&(res.type==='basic'||e.request.url.includes('fonts.g'))){const cp=res.clone();caches.open(CACHE).then(c=>c.put(e.request,cp))}
-    return res;
-  }).catch(()=>caches.match('./index.html'))));
+
+self.addEventListener('install',event=>{
+  event.waitUntil(
+    caches.open(CACHE)
+      .then(cache=>cache.addAll(ARCHIVOS))
+      .then(()=>self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate',event=>{
+  event.waitUntil(
+    caches.keys()
+      .then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key))))
+      .then(()=>self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch',event=>{
+  const request=event.request;
+  if(request.method!=='GET') return;
+
+  const url=new URL(request.url);
+  const isAppPage=request.mode==='navigate' || url.pathname.endsWith('/index.html');
+
+  if(isAppPage){
+    event.respondWith(
+      fetch(request,{cache:'no-store'})
+        .then(response=>{
+          if(response&&response.ok){
+            const copy=response.clone();
+            caches.open(CACHE).then(cache=>cache.put(request,copy));
+          }
+          return response;
+        })
+        .catch(()=>caches.match(request).then(cached=>cached||caches.match('./index.html')))
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(request).then(cached=>{
+      if(cached) return cached;
+      return fetch(request).then(response=>{
+        if(response&&response.ok&&(response.type==='basic'||url.hostname==='fonts.googleapis.com'||url.hostname==='fonts.gstatic.com')){
+          const copy=response.clone();
+          caches.open(CACHE).then(cache=>cache.put(request,copy));
+        }
+        return response;
+      });
+    })
+  );
 });
