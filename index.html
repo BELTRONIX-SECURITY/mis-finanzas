@@ -368,7 +368,7 @@ $('quitarPin').onclick=function(){
 };
 /* Biometría local mediante WebAuthn / autenticador del dispositivo */
 var BIOKEY='misfinanzas:biometria:v1';
-function b64url(bytes){var s=btoa(String.fromCharCode.apply(null,new Uint8Array(bytes)));return s.replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'')}
+function b64url(bytes){var s=btoa(String.fromCharCode.apply(null,new Uint8Array(bytes)));return s.split('+').join('-').split('/').join('_').replace(/=+$/,'')}
 function unb64url(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';return Uint8Array.from(atob(s),function(c){return c.charCodeAt(0)})}
 function bioGuardada(){try{return JSON.parse(localStorage.getItem(BIOKEY)||'null')}catch(e){return null}}
 function activarHuella(){
