@@ -154,6 +154,7 @@ input:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-of
     <label for="pinConfirmar">Confirmar PIN</label><input id="pinConfirmar" type="password" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="••••••">
     <div class="err" id="errAjustes" role="alert"></div>
     <div class="actions"><button id="guardarPin" class="ok">Activar / cambiar PIN</button><button id="quitarPin">Desactivar PIN</button></div>
+    <div class="actions"><button id="activarHuella" class="ok">Activar huella en este dispositivo</button><button id="quitarHuella">Desactivar huella</button></div><p class="lbl" id="estadoHuella">La huella requiere un dispositivo compatible y una conexión segura.</p>
     <div class="actions"><button id="cerrarAjustes">Cerrar</button></div>
     <p class="lbl" style="margin-top:12px">Aviso: el PIN añade privacidad visual, pero no cifra los registros ni sustituye el bloqueo del móvil. Si olvidas el PIN, la copia JSON permite recuperar los datos en otra instalación.</p>
   </div>
@@ -162,7 +163,7 @@ input:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-of
   <div class="sheet" role="dialog" aria-label="Desbloquear Mis Finanzas">
     <h2>Mis Finanzas está bloqueada</h2><p class="lbl">Introduce tu PIN para continuar.</p>
     <label for="pinEntrada">PIN de 6 dígitos</label><input id="pinEntrada" type="password" inputmode="numeric" maxlength="6" placeholder="••••••">
-    <div class="err" id="errBloqueo" role="alert"></div><div class="actions"><button id="desbloquear" class="ok">Desbloquear</button></div>
+    <div class="err" id="errBloqueo" role="alert"></div><div class="actions"><button id="desbloquearHuella" class="ok" style="display:none">Usar huella dactilar</button></div><div class="actions"><button id="desbloquear">Desbloquear con PIN</button></div>
   </div>
 </div>
 
@@ -365,8 +366,59 @@ $('quitarPin').onclick=function(){
   if(!p){$('errAjustes').textContent='Introduce el PIN actual en el primer campo para desactivarlo.';return}
   comprobarPin(p).then(function(ok){if(ok){localStorage.removeItem(PINKEY);$('pinNuevo').value='';$('pinConfirmar').value='';$('errAjustes').textContent='PIN desactivado.'}else{$('errAjustes').textContent='El PIN actual no es correcto.'}});
 };
+/* Biometría local mediante WebAuthn / autenticador del dispositivo */
+var BIOKEY='misfinanzas:biometria:v1';
+function b64url(bytes){var s=btoa(String.fromCharCode.apply(null,new Uint8Array(bytes)));return s.replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'')}
+function unb64url(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';return Uint8Array.from(atob(s),function(c){return c.charCodeAt(0)})}
+function bioGuardada(){try{return JSON.parse(localStorage.getItem(BIOKEY)||'null')}catch(e){return null}}
+function activarHuella(){
+  if(!window.isSecureContext||!navigator.credentials||!window.PublicKeyCredential){$('errAjustes').textContent='Este navegador o contexto no admite autenticación biométrica WebAuthn.';return}
+  var disponible=PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable;
+  var check=disponible?disponible.call(PublicKeyCredential):Promise.resolve(false);
+  check.then(function(ok){
+    if(!ok)throw new Error('No se detectó un autenticador biométrico compatible en este dispositivo.');
+    var challenge=crypto.getRandomValues(new Uint8Array(32));
+    var userId=crypto.getRandomValues(new Uint8Array(16));
+    return navigator.credentials.create({publicKey:{
+      challenge:challenge,
+      rp:{name:'Mis Finanzas'},
+      user:{id:userId,name:'usuario-local',displayName:'Usuario de Mis Finanzas'},
+      pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+      authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'discouraged'},
+      timeout:60000,attestation:'none'
+    }});
+  }).then(function(cred){
+    if(!cred)throw new Error('No se pudo registrar la huella.');
+    localStorage.setItem(BIOKEY,JSON.stringify({id:b64url(cred.rawId),createdAt:new Date().toISOString()}));
+    $('estadoHuella').textContent='Huella activada en este dispositivo.';
+    $('errAjustes').textContent='Autenticación biométrica activada correctamente.';
+  }).catch(function(e){$('errAjustes').textContent=e.message||'No se pudo activar la huella.'});
+}
+function desbloquearHuella(){
+  var bio=bioGuardada();
+  if(!bio||!navigator.credentials){$('errBloqueo').textContent='La huella no está configurada.';return}
+  var challenge=crypto.getRandomValues(new Uint8Array(32));
+  navigator.credentials.get({publicKey:{
+    challenge:challenge,
+    allowCredentials:[{type:'public-key',id:unb64url(bio.id)}],
+    userVerification:'required',
+    timeout:60000
+  }}).then(function(cred){
+    if(!cred||b64url(cred.rawId)!==bio.id)throw new Error('No se pudo verificar la credencial de este dispositivo.');
+    $('bloqueo').className='back';$('pinEntrada').value='';$('errBloqueo').textContent='';
+  }).catch(function(e){$('errBloqueo').textContent=e.name==='NotAllowedError'?'No se completó la autenticación. Puedes intentarlo de nuevo o usar tu PIN.':(e.message||'Falló la autenticación biométrica. Puedes usar tu PIN.')});
+}
+$('activarHuella').onclick=activarHuella;
+$('quitarHuella').onclick=function(){
+  if(!bioGuardada()){$('errAjustes').textContent='No hay huella configurada en esta aplicación.';return}
+  if(confirm('¿Desactivar el desbloqueo biométrico en esta aplicación?')){localStorage.removeItem(BIOKEY);$('estadoHuella').textContent='Huella desactivada en esta aplicación.';$('errAjustes').textContent='Desbloqueo biométrico desactivado.'}
+};
+$('desbloquearHuella').onclick=desbloquearHuella;
 function iniciarBloqueo(){
-  if(leerPin()){$('bloqueo').className='back on';$('pinEntrada').focus()}
+  var bio=bioGuardada();
+  $('desbloquearHuella').style.display=bio?'block':'none';
+  $('estadoHuella').textContent=bio?'Huella activada en este dispositivo.':'La huella requiere un dispositivo compatible y una conexión segura.';
+  if(leerPin()||bio){$('bloqueo').className='back on';if(!bio)$('pinEntrada').focus()}
 }
 $('desbloquear').onclick=function(){
   var p=$('pinEntrada').value;
