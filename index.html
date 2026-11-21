@@ -312,7 +312,7 @@ function importarCopia(file){
     try{
       var data=JSON.parse(String(reader.result||''));
       if(!data||data.app!=='Mis Finanzas'||data.version!==1||!Array.isArray(data.transactions))throw new Error('El archivo no es una copia válida de Mis Finanzas.');
-      var valid=data.transactions.every(function(t){return t&&Number.isFinite(Number(t.id))&&(t.tipo==='ingreso'||t.tipo==='gasto')&&Number.isFinite(Number(t.monto))&&Number(t.monto)>0&&typeof t.desc==='string'&&typeof t.cat==='string'&&/^\\d{4}-\\d{2}-\\d{2}$/.test(t.fecha)});
+      var valid=data.transactions.every(function(t){return t&&Number.isFinite(Number(t.id))&&(t.tipo==='ingreso'||t.tipo==='gasto')&&Number.isFinite(Number(t.monto))&&Number(t.monto)>0&&typeof t.desc==='string'&&typeof t.cat==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(t.fecha)});
       if(!valid)throw new Error('La copia contiene movimientos con un formato incorrecto.');
       if(!confirm('La importación sustituirá los movimientos actuales ('+tx.length+') por los de la copia ('+data.transactions.length+'). ¿Continuar?'))return;
       tx=data.transactions.map(function(t){return {id:Number(t.id),tipo:t.tipo,monto:Math.round(Number(t.monto)*100)/100,desc:t.desc.slice(0,120),fecha:t.fecha,cat:t.cat.slice(0,60)}});
@@ -353,7 +353,7 @@ function comprobarPin(pin){
 }
 $('guardarPin').onclick=function(){
   var p=$('pinNuevo').value,q=$('pinConfirmar').value;
-  if(!/^\\d{6}$/.test(p)){$('errAjustes').textContent='El PIN debe tener exactamente 6 dígitos.';return}
+  if(!/^\d{6}$/.test(p)){$('errAjustes').textContent='El PIN debe tener exactamente 6 dígitos.';return}
   if(p!==q){$('errAjustes').textContent='Los PIN no coinciden.';return}
   if(!window.crypto||!crypto.subtle){$('errAjustes').textContent='Este navegador no permite configurar el PIN de forma segura.';return}
   var salt=crypto.getRandomValues(new Uint8Array(16));
@@ -370,7 +370,7 @@ function iniciarBloqueo(){
 }
 $('desbloquear').onclick=function(){
   var p=$('pinEntrada').value;
-  if(!/^\\d{6}$/.test(p)){$('errBloqueo').textContent='Introduce los 6 dígitos.';return}
+  if(!/^\d{6}$/.test(p)){$('errBloqueo').textContent='Introduce los 6 dígitos.';return}
   comprobarPin(p).then(function(ok){if(ok){$('bloqueo').className='back';$('pinEntrada').value='';$('errBloqueo').textContent=''}else{$('errBloqueo').textContent='PIN incorrecto.';$('pinEntrada').value=''}});
 };
 $('pinEntrada').addEventListener('keydown',function(e){if(e.key==='Enter')$('desbloquear').click()});
